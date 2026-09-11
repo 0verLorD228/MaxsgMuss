@@ -1,0 +1,41 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+venv312/
+.venv312/
+env/
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# Build files
+build/
+dist/
+*.spec
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Secrets
+.env
+.env.*
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Video recordings
+*.mp4
+*.avi
+*.mov
