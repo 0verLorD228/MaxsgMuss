@@ -78,6 +78,9 @@ THEMES = {
         "accent": "#38bdf8",
         "success": "#4ade80",
         "danger": "#fb7185",
+        "warning": "#fbbf24",  # Янтарный цвет истекшего времени.
+        "timeout_panel": "#342a1b",
+        "timeout_preview": "#111b2b",
         "border": "#26344c",
         "result": "#1a2940",
         "success_panel": "#12352e",
@@ -98,6 +101,9 @@ THEMES = {
         "accent": "#078bc8",
         "success": "#17804b",
         "danger": "#cf3f58",
+        "warning": "#946000",
+        "timeout_panel": "#fff1d0",
+        "timeout_preview": "#f4f7fc",
         "border": "#cbd8e8",
         "result": "#e6edf7",
         "success_panel": "#dff5e9",
@@ -119,6 +125,30 @@ GESTURES = {
     "fist": ("Кулак", "Сожмите четыре пальца в кулак. Большой палец можно положить сверху."),
     "thumbs_up": ("Большой палец вверх", "Сожмите четыре пальца и поднимите большой палец вверх."),
 }
+
+
+def draw_timeout_picture(colors):
+    """Рисует часы для экрана тайм-аута. PNG и новые библиотеки не нужны."""
+    from PIL import Image, ImageDraw  # Pillow уже используется для видео.
+
+    picture = Image.new("RGBA", (320, 320), (0, 0, 0, 0))  # Прозрачный фон.
+    draw = ImageDraw.Draw(picture)
+    ink = colors["warning"]
+    # Круглый циферблат и внешняя дуга изображают закончившийся отсчёт.
+    draw.ellipse((42, 42, 278, 278), fill=colors["timeout_panel"])
+    draw.arc((22, 22, 298, 298), start=285, end=615, fill=ink, width=6)
+    draw.ellipse((72, 72, 248, 248), outline=ink, width=8)
+    # Четыре отметки часов и две стрелки: всё рисуется простыми линиями.
+    for line in ((160, 88, 160, 101), (219, 160, 232, 160),
+                 (160, 219, 160, 232), (88, 160, 101, 160)):
+        draw.line(line, fill=ink, width=6)
+    draw.line((160, 117, 160, 160, 191, 179), fill=ink, width=10)
+    draw.ellipse((152, 152, 168, 168), fill=ink)
+    # Небольшая отметка привлекает внимание к завершению времени.
+    draw.ellipse((227, 227, 291, 291), fill=ink)
+    draw.line((259, 239, 259, 261), fill=colors["timeout_preview"], width=7)
+    draw.ellipse((255, 271, 263, 279), fill=colors["timeout_preview"])
+    return picture
 
 
 def recognize_gesture(points):
@@ -219,7 +249,7 @@ class CaptchaApp:
         self.theme_mode = "dark"  # Текущая тема: dark или light.
         self.colors = THEMES[self.theme_mode].copy()  # Активная палитра виджетов.
         self.status_color_key = "muted"  # Нужен, чтобы перекрасить статус при смене темы.
-        self.preview_state = "placeholder"  # placeholder, camera или success.
+        self.preview_state = "placeholder"  # placeholder, camera, success или timeout.
         self.animation_id = None  # Идентификатор анимации успешной проверки.
         self.loading_id = None  # Идентификатор анимации подключения камеры.
         self.animation_step = 0
@@ -315,6 +345,12 @@ class CaptchaApp:
             self.placeholder, text="◉", font=("Arial", 42, "bold"),
             text_color=self.colors["accent"], width=88, height=88, corner_radius=44)
         self.placeholder_icon.pack(pady=(0, 18))
+        # Рисуем один раз две небольшие картинки; CTkImage сам выбирает тему.
+        self.timeout_image = ctk.CTkImage(
+            light_image=draw_timeout_picture(THEMES["light"]),
+            dark_image=draw_timeout_picture(THEMES["dark"]), size=(144, 144))
+        self.timeout_illustration = ctk.CTkLabel(
+            self.placeholder, text="", image=self.timeout_image)
         self.placeholder_title = ctk.CTkLabel(
             self.placeholder, text="Подключение камеры", text_color=self.colors["text"],
             font=("Arial", 20, "bold"), wraplength=360)
@@ -490,13 +526,7 @@ class CaptchaApp:
             fg_color=c["panel_light"], button_color=c["panel_light"],
             button_hover_color=c["secondary_hover"], text_color=c["text"])
         self.live_label.configure(text_color=c[self.live_color_key])
-        self.video_box.configure(
-            fg_color=c["success_preview"] if self.preview_state == "success" else c["camera"])
-        self.placeholder_icon.configure(
-            text_color=c["success"] if self.preview_state == "success" else c["accent"],
-            fg_color=c["success_icon"] if self.preview_state == "success" else "transparent")
-        self.placeholder_title.configure(
-            text_color=c["success"] if self.preview_state == "success" else c["text"])
+        self.style_placeholder()
         self.placeholder_hint.configure(text_color=c["muted"])
         self.panel.configure(
             fg_color=c["panel"], bg_color=c["background"], border_color=c["border"])
@@ -515,7 +545,8 @@ class CaptchaApp:
         self.hold_label.configure(text_color=c["muted"])
         self.progress.configure(fg_color=c["border"], progress_color=c["accent"])
         self.result_box.configure(
-            fg_color=c["success_panel"] if self.status_color_key == "success" else c["result"])
+            fg_color=c["success_panel"] if self.status_color_key == "success"
+            else c["timeout_panel"] if self.status_color_key == "warning" else c["result"])
         self.status.configure(text_color=c[self.status_color_key])
         self.result_hint.configure(text_color=c["muted"])
         self.new_button.configure(
@@ -578,6 +609,7 @@ class CaptchaApp:
         # при переключении темы даже посреди проверки.
         color_keys = {
             "success": (self.colors["success"], SUCCESS_COLOR),
+            "warning": (self.colors["warning"],),
             "danger": (self.colors["danger"], DANGER_COLOR),
             "accent": (self.colors["accent"], ACCENT_COLOR),
             "muted": (self.colors["muted"], MUTED_COLOR),
@@ -587,7 +619,8 @@ class CaptchaApp:
         self.status.configure(text=text, text_color=color)
         self.result_hint.configure(text=hint)
         self.result_box.configure(
-            fg_color=self.colors["success_panel"] if self.status_color_key == "success" else self.colors["result"])
+            fg_color=self.colors["success_panel"] if self.status_color_key == "success"
+            else self.colors["timeout_panel"] if self.status_color_key == "warning" else self.colors["result"])
 
     def set_camera_badge(self, text, color):
         color_keys = {
@@ -600,25 +633,42 @@ class CaptchaApp:
             (key for key, values in color_keys.items() if color in values), "muted")
         self.camera_badge.configure(text="●  " + text, text_color=color)
 
-    def show_placeholder(self, title, hint, success=False, loading=False):
-        """Заменяет кадр фоном: после успеха показывает зелёную галочку."""
+    def style_placeholder(self):
+        """Подбирает фон и цвет текста для текущего состояния и темы."""
+        c = self.colors
+        background, title_color = c["camera"], c["text"]
+        if self.preview_state == "success":
+            background, title_color = c["success_preview"], c["success"]
+        elif self.preview_state == "timeout":
+            background, title_color = c["timeout_preview"], c["warning"]
+        self.video_box.configure(fg_color=background)
+        self.placeholder_title.configure(text_color=title_color)
+        self.placeholder_icon.configure(
+            text_color=c["success"] if self.preview_state == "success" else c["accent"],
+            fg_color=c["success_icon"] if self.preview_state == "success" else "transparent")
+
+    def show_placeholder(self, title, hint, success=False, loading=False, timeout=False):
+        """Полностью убирает кадр и показывает фон, галочку или картинку часов."""
         self.stop_animations()
         self.last_picture = None
-        self.preview_state = "success" if success else "placeholder"
+        self.preview_state = "timeout" if timeout else "success" if success else "placeholder"
         # grid_forget также убирает сохранённое размещение CustomTkinter:
         # скрытый элемент не появится сам при изменении масштаба экрана.
         self.video.grid_forget()
         self.video.configure(image=self.empty_image)  # Заменяем кадр пустым пикселем.
         self.preview_image = None  # Освобождаем сохранённый кадр и его масштабированные копии.
-        # Фон рисуется обычными виджетами: отдельная картинка для запуска не нужна.
-        self.video_box.configure(
-            fg_color=self.colors["success_preview"] if success else self.colors["camera"])
+        # При повторе прячем часы и возвращаем обычный значок на его место.
+        self.timeout_illustration.pack_forget()
+        self.placeholder_icon.pack_forget()
+        if timeout:
+            self.timeout_illustration.pack(before=self.placeholder_title, pady=(0, 14))
+        else:
+            self.placeholder_icon.pack(before=self.placeholder_title, pady=(0, 18))
         self.placeholder_icon.configure(
             text="✓" if success else "◉",
-            text_color=self.colors["success"] if success else self.colors["accent"],
-            fg_color=self.colors["success_icon"] if success else "transparent")
-        self.placeholder_title.configure(
-            text=title, text_color=self.colors["success"] if success else self.colors["text"])
+            font=("Arial", 42, "bold"))
+        self.placeholder_title.configure(text=title)
+        self.style_placeholder()
         self.placeholder_hint.configure(text=hint, text_color=self.colors["muted"])
         self.placeholder.grid(row=0, column=0, padx=20, pady=20)
         if success:
@@ -749,9 +799,17 @@ class CaptchaApp:
             self.access_granted = False
             self.match_since = None
             self.set_progress(0)
-            self.set_status("Время истекло", self.colors["danger"], "Доступ закрыт. Можно попробовать ещё раз.")
             self.stop_camera()
-            self.new_button.configure(text="Повторить попытку")
+            self.show_placeholder(
+                "Время вышло",
+                "Камера выключена. Нажмите «Повторить попытку» или пробел.",
+                timeout=True,
+            )
+            self.set_status("Время вышло", self.colors["warning"], "Доступ закрыт. Попробуйте ещё раз.")
+            self.timer_color_key = "warning"
+            self.timer.configure(text="0.0 с", text_color=self.colors["warning"])
+            self.detected.configure(text="Проверка завершена")  # Убираем последний распознанный жест.
+            self.new_button.configure(state="normal", text="Повторить попытку")
             return
         if self.last_frame_at is not None and now - self.last_frame_at > MAX_FRAME_GAP:
             self.match_since = None  # Пауза в кадрах не считается удержанием.
