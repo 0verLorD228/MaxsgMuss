@@ -1,0 +1,7 @@
+# Библиотеки MaxsgMuss. Нужен Python 3.11 или 3.12 (64-bit).
+# Версии закреплены: mediapipe 0.10.21 — последняя со старым API mp.solutions.
+mediapipe==0.10.21
+opencv-contrib-python==4.11.0.86
+numpy==1.26.4
+pillow==11.3.0
+customtkinter==5.2.2
